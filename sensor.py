@@ -28,7 +28,7 @@ SCAN_INTERVAL = timedelta(seconds=60)
 # Sensor types are defined like: Name, units
 SENSOR_TYPES = {
     'updater': [None, 'Updater', None],
-    'temperature': [DEVICE_CLASS_TEMPERATURE, 'Temperature', '°C'],
+    'temperature': [DEVICE_CLASS_TEMPERATURE, 'Temperature', '°F'],
     'humidity': [DEVICE_CLASS_HUMIDITY, 'Humidity', '%'],
     'battery': [DEVICE_CLASS_BATTERY, 'Battery', '%'],
 }
@@ -154,23 +154,37 @@ class InkbirdUpdater(Entity):
     def handleDiscovery(self, dev):
         _LOGGER.debug(f"Discovered device {dev.addr}")
         _LOGGER.debug("Device {} ({}), RSSI={} dB".format(dev.addr, dev.addrType, dev.rssi))
-        for (adtype, desc, value) in dev.getScanData():
-            _LOGGER.debug("[%s]  %s = %s" % (adtype, desc, value))
-            if adtype == 255:
-                humidity = "%2.2f" % (int(value[6:8]+value[4:6], 16)/100)
-                #temperature = "%2.2f" % (int(value[2:4]+value[:2], 16)/100)
-                temperature = int(value[2:4]+value[:2], 16)
-                temperature_bits = 16
-                if temperature & (1 << (temperature_bits-1)):
-                    temperature -= 1 << temperature_bits
-                temperature = "%2.2f" % (temperature / 100)
-                battery = int(value[14:16], 16)
-                _LOGGER.debug(self.inkbird_devices)
-                for device in self.inkbird_devices:
-                    _LOGGER.debug(f" dev addr is {dev.addr} and mac is {device.mac}")
-                    _LOGGER.debug(f" --> {temperature} - {humidity} - {battery} ")
-                    if dev.addr == device.mac:
-                        _LOGGER.debug(f" dev addr is {dev.addr} and mac is {device.mac} with parameter of {device.parameter}")
+        _LOGGER.debug(self.inkbird_devices)
+        for device in self.inkbird_devices:
+            _LOGGER.debug(f" dev addr is {dev.addr} and mac is {device.mac}")
+            if dev.addr == device.mac:
+                _LOGGER.debug(f" dev addr is {dev.addr} and mac is {device.mac} with parameter of {device.parameter}")
+                for (adtype, desc, value) in dev.getScanData():
+                    _LOGGER.debug("[%s]  %s = %s" % (adtype, desc, value))
+                    if adtype == 255:
+                        humidity = "%2.2f" % (int(value[6:8]+value[4:6], 16)/100)
+                        #temperature = "%2.2f" % (int(value[2:4]+value[:2], 16)/100)
+                        temperature = int(value[2:4]+value[:2], 16)
+                        temperature_bits = 16
+                        if temperature & (1 << (temperature_bits-1)):
+                            temperature -= 1 << temperature_bits
+                
+                        #Convert to temperature Fehrenheit
+                        celcius = "%3.3f" % (temperature / 100)
+                        temperature = (temperature / 100 * 1.8) + 32
+                
+                        #Standardize temperature to 0.25 values
+                        temperature = round(temperature*4)/4
+
+                        temperature = "%2.2f" % temperature
+
+                        tmp_battery = value[14:16]
+                        battery = int("0", 16)
+                        if tmp_battery != '':
+                            battery = int(tmp_battery, 16)
+                        
+                        _LOGGER.debug(f" --> {temperature} - {humidity} - {battery} ")
+                        
                         old_state = self.hass.states.get(f"sensor.{device.entity_name}")
                         if old_state:
                             attrs = old_state.attributes
@@ -179,6 +193,7 @@ class InkbirdUpdater(Entity):
 
                         if device.parameter == "temperature":
                             _LOGGER.debug(f" >>>> updating device {device.mac} with {temperature}")
+                            _LOGGER.info(f"Converted Celcius {celcius} to Fahrenheit {temperature}")
                             device.temperature = temperature
                             device._state = temperature
                             #self.hass.states.set(f"sensor.{device.entity_name}", temperature, attrs)

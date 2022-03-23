@@ -1,6 +1,7 @@
 {
   "domain": "inkbird",
   "name": "Inkbird Temp/Humidity Sensor",
+  "version": "1.0.0",
   "documentation": "https://github.com/stelford/home-assistant_inkbid",
   "dependencies": [],
   "codeowners": ["@stelford"],
